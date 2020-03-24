@@ -25,18 +25,11 @@ header = {
 sc = SparkContext(appName='Keywords Crawler')
 
 # Read data from .csv file into RDD
-input_file_name = 'input.csv'
-output_file_name = 'output.csv'
+input_file_name = 'input'
+output_file_name = 'output'
 
 # Choose keywords to use and concatenate them into one list
 keywords = keywords_fr + keywords_en + keywords_common
-
-
-# Get keywords and set header of output file to id, website, title, LinkedIn, and all keywords
-def output_header(unique_id='ID'):
-    output_file_header = [unique_id, 'Website', 'Title', 'LinkedIn']
-    output_file_header.extend(keywords)
-    return output_file_header
 
 
 def initialize_keywords_count():
@@ -59,10 +52,24 @@ def get_base_url(url):
 
 
 def read_input_file():
-    df = pd.read_csv(input_file_name)
+    df = pd.read_csv(input_file_name + '.csv')
     input_dict = df.to_dict(orient='records')
     input_rdd = sc.parallelize(input_dict)
     return input_rdd
+
+
+def chunked_read(chunk_size):
+    rdd_array = []
+    df = pd.read_csv(input_file_name + '.csv')
+    max_len = len(df.index)
+    for chunk in range(0, max_len, chunk_size):
+        if chunk + chunk_size < max_len:
+            input_dict = df.iloc[chunk: chunk + chunk_size, :].to_dict(orient='records')
+        else:
+            input_dict = df.iloc[chunk: max_len, :].to_dict(orient='records')
+        input_rdd = sc.parallelize(input_dict)
+        rdd_array.append(input_rdd)
+    return rdd_array
 
 
 def prepare_url(url):
@@ -313,11 +320,29 @@ def crawl_url(row):
     return output_tuple
 
 
-input_rdd = read_input_file()
-output_rdd = input_rdd.map(lambda row: crawl_url(row))
+def get_output_df(input_rdd, field_names):
+    output_rdd = input_rdd.map(lambda row: crawl_url(row))
+    output_list = output_rdd.collect()
+    output_df = pd.DataFrame(output_list, columns=field_names)
+    return output_df
 
-output_list = output_rdd.collect()
-field_names = ['Siren', 'URL', 'title', 'language', 'linkedin']
-field_names.extend(keywords)
-output_df = pd.DataFrame(output_list, columns=field_names)
-output_df.to_csv(output_file_name, index=False)
+
+def launch_crawler(chunk_size=None):
+    print('Start Crawling!')
+    field_names = ['Siren', 'URL', 'title', 'language', 'linkedIn']
+    field_names.extend(keywords)
+    if chunk_size is None:
+        input_rdd = read_input_file()
+        output_df = get_output_df(input_rdd, field_names)
+        output_df.to_csv(output_file_name + '.csv', index=False)
+    else:
+        rdd_array = chunked_read(chunk_size)
+        file_number = 1
+        for input_rdd in rdd_array:
+            output_df = get_output_df(input_rdd, field_names)
+            output_df.to_csv(output_file_name + '_' + str(file_number) + '.csv', index=False)
+            file_number += 1
+    print('Done Crawling!')
+
+
+launch_crawler()
