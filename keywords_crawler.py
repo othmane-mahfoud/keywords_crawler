@@ -103,37 +103,6 @@ def get_language(soup):
     return language
 
 
-def get_all_links(url, selector, max_depth=3):
-    all_links = []
-    try:
-        first_page_links = selector.xpath('//a/@href').getall()
-        try:
-            for i in range(max_depth):
-                temp_links = []
-                for link in first_page_links:
-                    link = prepare_url(link)
-                    try:
-                        response = requests.get(link, timeout=get_timeout)
-                        inner_selector = Selector(response.text)
-                        inner_links = inner_selector.xpath('//a/@href').getall()
-                        temp_links.extend(inner_links)
-                    except:
-                        print('Could not request new links')
-                try:
-                    all_links.extend(temp_links)
-                    first_page_links = temp_links
-                except:
-                    print('Could not append new links')
-            all_links = list(set(all_links))
-        except:
-            print('Could not get links in depth')
-            all_links = first_page_links
-    except:
-        print('Could not get first page links')
-        all_links = []
-    return all_links
-
-
 def links_initial_cleaning(url, all_links):
     cleaned_links = []
     for link in all_links:
@@ -201,19 +170,26 @@ def process_links(url, cleaned_links):
     return [link for link in processed_links if link]
 
 
+def clean_soup(response):
+    soup = BeautifulSoup(response.text, "html.parser")
+    for script in soup(["script", "style"]):
+        script.extract()
+    text = soup.get_text()
+    lines = (line.strip() for line in text.splitlines())
+    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+    text = '\n'.join(chunk for chunk in chunks if chunk)
+    return text
+
+
 def keyword_counter(processed_links, keywords_count_dict):
+    processed_links = list(set(processed_links))
     for link in processed_links:
+        print('Counting keywords on ' + link)
         try:
             link = prepare_url(link)
             response = requests.get(link)
             try:
-                soup = BeautifulSoup(response.text, 'lxml')
-                # for script in soup['script', 'style']:
-                #     script.decompose()
-                text = soup.get_text()
-                lines = (line.strip() for line in text.splitlines())
-                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-                text = '\n'.join(chunk for chunk in chunks if chunk)
+                text = clean_soup(response)
                 try:
                     for keyword in keywords_count_dict.keys():
                         reg_finder = re.compile(keyword, re.IGNORECASE)
@@ -222,16 +198,15 @@ def keyword_counter(processed_links, keywords_count_dict):
                             keywords_count_dict[keyword] = len(matches)
                         else:
                             keywords_count_dict[keyword] = keywords_count_dict[keyword] + len(matches)
-                    return keywords_count_dict
                 except:
                     print('Could not count keywords')
-                    return keywords_count_dict
+                    continue
             except:
                 print('Could not get soup for keyword counting')
-                return keywords_count_dict
+                continue
         except:
             print('Could not get URL for keyword counting')
-            return keywords_count_dict
+            continue
     return keywords_count_dict
 
 
@@ -239,18 +214,16 @@ def convert_dict_to_list(dict_to_convert):
     new_list = []
     try:
         new_list = [value for value in dict_to_convert.values()]
-        # for key, value in dict_to_convert.items():
-        #     new_list.append(value)
     except:
         raise Exception('Could not convert dictionary to list')
     return new_list
 
 
 def crawl_url(row):
-    # get input variable
+    # Get input variable
     unique_id = row['Siren']
     url = row['URL']
-    # init output variables
+    # Init output variables
     title = ''
     language = ''
     linkedin = ''
@@ -277,15 +250,13 @@ def crawl_url(row):
                     except:
                         print('Could not get language')
                         language = None
-                    # Get all the links in the website
                     try:
+                        # Get all the links in the website
                         selector = Selector(response.text)
                         all_links = selector.xpath('//a/@href').getall()
-                        # all_links = get_all_links(url, selector)
-                        print(len(all_links))
-                        print(all_links)
                         cleaned_links = []
                         processed_links = []
+                        # Prepare links
                         try:
                             prepared_links = []
                             for link in all_links:
@@ -293,11 +264,13 @@ def crawl_url(row):
                                 prepared_links.append(prepared_link)
                         except:
                             prepared_links = all_links
+                        # Get company LinkedIn
                         try:
                             linkedin = get_linkedin(url, prepared_links)
                         except:
                             print('Could not get LinkedIn')
                             linkedin = None
+                        # Cleaning and processing links
                         try:
                             cleaned_links = links_initial_cleaning(url, prepared_links)
                         except:
@@ -308,11 +281,13 @@ def crawl_url(row):
                         except:
                             print('Could not get process links')
                             processed_links = []
+                        # Counting keywords
                         try:
                             keywords_after_count_dict = keyword_counter(processed_links, keywords_count_dict)
                         except:
                             print('Could not get keywords count')
                             keywords_after_count_dict = keywords_count_dict
+                        # Convert keywords dictionary to list
                         try:
                             keywords_after_count_list = convert_dict_to_list(keywords_after_count_dict)
                         except:
@@ -345,4 +320,4 @@ output_list = output_rdd.collect()
 field_names = ['Siren', 'URL', 'title', 'language', 'linkedin']
 field_names.extend(keywords)
 output_df = pd.DataFrame(output_list, columns=field_names)
-output_df.to_csv(output_file_name)
+output_df.to_csv(output_file_name, index=False)

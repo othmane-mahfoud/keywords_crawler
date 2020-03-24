@@ -26,4 +26,4 @@ links_to_avoid = ['.pdf', '.doc', '.docx', '.dmg', '.xls', '.xlsx', '.ppt', '.pp
                     '.zip', '.7z', '.rar', '.tar.', '.tgz', '.tbz2', '.txz', '.sr2', '.vcf',
                     '.sr2', '.vcf', 'mailto:', 'tel:', 'facebook', 'twitter', 'instagram', 'linkedin', 'snapchat',
                     'pinterest', 'youtube', 'indeed', 'vimeo', 'viadeo', 'dailymotion', 'download', 'telechar',
-                    'torrent']
+                    'torrent', 'login']
