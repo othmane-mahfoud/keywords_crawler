@@ -188,9 +188,20 @@ def clean_soup(response):
     return text
 
 
+def keep_most_important_links(links):
+    sorted_links = sorted(links, key=len)
+    if len(sorted_links) > 50:
+        most_important_links = sorted_links[:50]
+    else:
+        most_important_links = sorted_links
+    return most_important_links
+
+
 def keyword_counter(processed_links, keywords_count_dict):
     processed_links = list(set(processed_links))
-    for link in processed_links:
+    most_important_links = keep_most_important_links(processed_links)
+    print(most_important_links)
+    for link in most_important_links:
         print('Counting keywords on ' + link)
         try:
             link = prepare_url(link)
@@ -346,3 +357,4 @@ def launch_crawler(chunk_size=None):
 
 
 launch_crawler()
+
